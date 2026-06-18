@@ -43,7 +43,7 @@ Building the whole environment from nothing: hypervisor and network segmentation
 
 ## Phase 2: Attack Simulation and Detection — *paused on purpose*
 
-Phase 2 is the offensive half: run real attacks against the domain and catch them in the SIEM. It's deliberately on hold, and the reason is a resequencing call I'd make again. Before I start hunting attacks, I'm widening the lens — standing up a second SIEM (Splunk) alongside Wazuh and a passive Suricata sensor on the wire, so I'm watching from both the endpoint *and* the network at once instead of trusting a single vantage point. Detecting an attack you can't see isn't detection, and I'd rather build the better instrument first than run the exercises half-blind. 
+Phase 2 is the offensive half: run real attacks against the domain and catch them in the SIEM. It's deliberately on hold, and the reason is a resequencing call I'd make again. Before I start hunting attacks, I'm widening the lens — standing up a second SIEM (Splunk) alongside Wazuh and a passive Suricata sensor on the wire, so I'm watching from both the endpoint *and* the network at once instead of trusting a single source. 
 
 Further, I built the original lab on Wazuh, but I keep seeing Splunk in job specifications for SOC roles. I want hands-on experience with the tools and processes that Recruiters care about. I have limits, in that I don't have access to the funds to build a full enterprise enviornment to play with. That said, I want to see what I *can* do within my limits. 
 
