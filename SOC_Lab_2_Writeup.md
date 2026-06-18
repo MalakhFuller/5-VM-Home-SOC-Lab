@@ -5,13 +5,17 @@
 
 > **Privacy note:** Internal lab IP addresses have been anonymized in this writeup and related screenshots. All testing was performed exclusively on my own isolated home lab network.
 
+> **How to read this:** This is the honest version — the wrong turns are in here on purpose. The build that goes perfectly the first time is the build where you didn't learn the thing that actually transfers. Where I assumed something, guessed wrong, or sat staring at a screen not understanding why it was empty, I've left it in, because that friction is the part I can actually defend in an interview.
+
 ---
 
 ## Objective
 
-The goal of this project was to build a multi-VM Home SOC Lab from scratch — completely isolated from my real home network — running entirely inside VMware Workstation Pro on a single host machine. The lab needed to include a SIEM, an attack platform, domain-joined Windows and Linux victim endpoints, and a functioning Active Directory domain controller.
+For a while, my "lab" was a laptop running Kali sitting next to my desktop, the two of them staring at each other across the desk. It worked — the way a cardboard box works as a fort. Fine for learning the basic moves, useless the moment I wanted to do anything that mattered: run something genuinely hostile, watch it cross a domain, see a SIEM light up the way it would in a real shop. You can't simulate an enterprise with two machines and good intentions.
 
-This was a significant upgrade from my prior dual-machine lab setup, where I used a secondary laptop running Kali to attack my actual desktop. That arrangement worked for early learning but wasn't sustainable for anything more advanced, especially once malware simulation entered the picture. A fully contained VM-based environment was the right move.
+So the question driving this build was simple, and a little intimidating: could I stand up — from nothing, on a single host — the actual environment a SOC analyst sits inside? Not a toy. A SIEM, an attacker, Windows *and* Linux endpoints, and a real Active Directory domain tying them together, all sealed off from my home network so I could eventually throw malware at it without flinching.
+
+Five VMs, fully isolated, running in VMware Workstation Pro. Going in, I assumed the scary part would be the Domain Controller — Active Directory has a reputation, and I'd only ever read about it. I was wrong about where the difficulty lived. The security tooling mostly behaved. What fought me was the connective tissue: a vendor's download portal, an unchecked box in a network editor, a DNS resolver pointed at the wrong place. That turned out to be the real lesson, and I'll come back to it.
 
 ---
 
@@ -38,57 +42,49 @@ This was a significant upgrade from my prior dual-machine lab setup, where I use
 | Kali-AttackBox | Attack Simulation | 4GB | 2 | 80GB | 10.10.10.128 |
 | Win11-Victim01 | Windows Endpoint + Wazuh Agent + Sysmon | 6GB | 2 | 100GB | 10.10.10.131 |
 | WinServer-DC01 | Active Directory Domain Controller | 4GB | 2 | 80GB | 10.10.10.134 |
-| Ubuntu-Victim02 | Linux Endpoint + Wazuh Agent | 2GB | 2 | 60GB | 10.10.10.132 |
+| Ubuntu-Victim02 | Linux Endpoint + Wazuh Agent | 2GB | 2 | 60GB | 10.10.10.133 |
 
 ---
 
 ## Network Architecture
 
-All five VMs operate on an isolated internal network with no direct access to my real home network. VMnet8 (NAT) was used temporarily during installation steps requiring internet access, and removed afterward.
+All five VMs live on an isolated internal network with no path to my real home network. VMnet8 (NAT) only ever existed temporarily, bolted on for the handful of steps that needed internet and pulled off the moment they were done.
 
 | Network | Purpose | Subnet |
 |---|---|---|
 | VMnet2 | SOC internal — all VMs | 10.10.10.0/24 |
 | VMnet8 | NAT (temporary, for downloads only) | 192.168.XX.XX/24 |
 
----
-
-## Summary
-
-Completed a full 5-VM SOC lab deployment from scratch in a single focused build session, including hypervisor configuration, network segmentation, SIEM installation, endpoint instrumentation, Active Directory deployment, and domain joining of both Windows and Linux endpoints.
+The toggle-NAT-on-only-when-you-need-it habit is deliberate. An isolated lab that's quietly reachable from the internet for "convenience" isn't isolated — it's a lab with a back door you forgot about. Easier to make internet the exception than the default.
 
 ---
 
-## Methodology
+## The Build
 
-### 1. Install VMware Workstation Pro
+### 1. The hardest part was a website
 
-This proved to be more difficult than expected — and the difficulty had nothing to do with the software itself. Navigating Broadcom's website after their acquisition of VMware was genuinely not the most user-friendly experience.
+I expected to spend my early friction on Active Directory. Instead I spent it on Broadcom's download portal, which was a genuinely instructive lesson in how *not* to lay out a site.
 
-The first obstacle was landing on an older page that said the software was only free for 30 days. That didn't match what I had read — Broadcom announced on November 11, 2024 that VMware Workstation Pro would be free for commercial, educational, and personal users with no license key required. So something was off.
+The first wall was an older page insisting the software was free for only 30 days. That didn't square with what I'd read — Broadcom announced on November 11, 2024 that VMware Workstation Pro would be free for commercial, educational, and personal use, no license key. So something was stale, and I made myself stop and resolve the contradiction instead of just clicking "download" on whatever was in front of me. (Acting on the first source you land on, before checking it against what you already know to be true, is how you end up confidently wrong. Old instinct, new context.)
 
-After a bit of clicking around, I created a profile on the Broadcom Support Portal. That seemed like the right move, but then I hit a wall — the page I landed on said "No data found." It turned out I had been dropped onto the "My Entitlements" page, which was empty because I hadn't purchased anything.
+I created a profile on the Broadcom Support Portal, which *felt* like progress right up until the page told me "No data found." It had dropped me on the **My Entitlements** page — empty, because I hadn't purchased anything. The actual download was buried under **My Downloads → All Products**; I searched "VMware Workstation Pro" and found it at the bottom of a long list. Agreed to the terms, and a 274MB installer finally appeared. Clean install from there.
 
-Eventually I found the actual download under **My Downloads → All Products**, searched for "VMware Workstation Pro", and it appeared at the bottom of a long list. After agreeing to the Terms and Conditions, the download finally became available. 274MB installer, clean install from there.
+Annoying, but worth keeping in the writeup, because "the tool is free and easy; *finding* the tool is the obstacle" is a pattern that repeats constantly in this field.
 
----
+### 2. Drawing the network before the machines
 
-### 2. Create the Isolated Virtual Networks
+Before I built a single VM, I built the network they'd sit on. Standing up machines first and trying to re-plumb them onto isolated segments later is exactly the kind of shortcut that costs you an evening, so I did the boring foundational thing first.
 
-Before touching a single VM, I needed the network infrastructure in place. Skipping this step and trying to fix it later is the kind of thing that causes headaches.
-
-In VMware, I went to **Edit → Virtual Network Editor** and created two custom networks:
+In **Edit → Virtual Network Editor** I created two custom networks:
 
 | Network | Purpose | Subnet |
 |---|---|---|
 | VMnet2 | SOC internal (all VMs) | 10.10.10.0/24 |
 | VMnet3 | Originally planned for Kali isolation | 10.10.20.0/24 |
 
-There was one non-obvious issue I ran into: VMnet2 and VMnet3 weren't showing up in the VM Network Adapter dropdown, even after creating them. After some troubleshooting, I found the fix — I needed to check **"Connect a host virtual adapter to this network"** for each custom network. Once that was checked and applied, both appeared in the dropdown as expected. In retrospect it makes sense, but it wasn't obvious from the UI.
+Then the first real head-scratcher: neither VMnet2 nor VMnet3 showed up in the VM's network-adapter dropdown, even though I'd just created them. They existed on paper and were invisible to the machines that needed them. The fix wasn't documented anywhere obvious — I had to find it by poking: each custom network needs **"Connect a host virtual adapter to this network"** checked. Tick that, apply, and both appeared instantly. In hindsight it's logical; from the UI it was not. This one bit me hard enough that it stuck, and it shows up again the next time I build a lab.
 
-I ultimately decided to put everything on VMnet2. The original plan was to put Kali on VMnet3 to simulate an attacker crossing a network segment boundary, but for this phase of the lab it made more sense to keep things simple. Real attackers don't always come from a separate segment anyway — what mattered was that Wazuh would see the traffic and generate alerts, not which virtual switch Kali was plugged into.
-
-Final network layout:
+I'd originally planned to drop Kali on VMnet3 to simulate an attacker crossing a segment boundary. I talked myself out of it for this phase and put everything on VMnet2. Real attackers don't always arrive from a tidy separate segment, and what I actually cared about was whether Wazuh would *see* the traffic and alert on it — not which virtual switch Kali happened to be plugged into. Knowing which complexity to skip is its own skill; I'd rather earn the segmentation lesson deliberately later than carry it as dead weight now.
 
 | VM | Network |
 |---|---|
@@ -98,158 +94,94 @@ Final network layout:
 | WinServer-DC01 | VMnet2 |
 | Ubuntu-Victim02 | VMnet2 |
 
----
+### 3. Kali, the easy one
 
-### 3. Set Up Kali-AttackBox
+Every build needs one part that just works, and this was it. From `https://www.kali.org/get-kali/#kali-virtual-machines` I grabbed the prebuilt VMware image as a `.7z`, extracted it to `C:\VMs\Kali-AttackBox\`, opened the `.vmx` directly, set it to 4GB / 2 cores / VMnet2, and powered on.
 
-This was the easiest part of the build. A quick search led me to `https://www.kali.org/get-kali/#kali-virtual-machines`, where I downloaded the VMware pre-built image as a `.7z` archive. After extracting to `C:\VMs\Kali-AttackBox\`, I opened the `.vmx` file directly in VMware, adjusted the settings (4GB RAM, 2 cores, VMnet2), and powered it on.
+Kali booted straight to the desktop. `ip a` confirmed it had picked up `10.10.10.128` on the right subnet — the first proof the network plumbing from step 2 actually worked — and I took a snapshot, **"Fresh Install - Clean."** (Snapshot, label it, move on. Every clean state I can roll back to is an hour I don't lose later.) Default creds on the prebuilt image are `kali` / `kali`.
 
-Kali booted straight to the desktop. I ran `ip a` to confirm it had picked up an IP on the right subnet — it had (10.10.10.128) — and then took a snapshot named **"Fresh Install - Clean"**.
+### 4. The SIEM — and a password that wouldn't take
 
-The default credentials for the pre-built Kali image are `kali` / `kali`.
+The Wazuh server runs on Ubuntu Server 26.04 LTS, pulled from `https://ubuntu.com/download/server`, in a heavier VM: 8GB / 4 cores / 200GB / VMnet2.
 
----
+The install was mostly uneventful, with one moment that made me second-guess myself: the network screen only offered "Continue without network," which felt like a problem. It wasn't. The VM had already grabbed `10.10.10.130` over DHCP — the installer was just being cautious. I continued without network and it finished fine. Build choices worth recording: full disk, LVM, no encryption; user `malakh`, hostname `wazuh-server`; OpenSSH installed; Ubuntu Pro skipped.
 
-### 4. Set Up the Wazuh Server (Ubuntu Server + Wazuh)
-
-#### Phase 1 — Install Ubuntu Server
-
-I downloaded Ubuntu Server 26.04 LTS from `https://ubuntu.com/download/server` and created a new VM: 8GB RAM, 4 cores, 200GB disk, VMnet2, pointed at the ISO.
-
-The installation was largely straightforward. The network configuration screen only offered "Continue without network," which felt wrong, but after playing around there wasn't any other real path forward. The VM had already picked up a valid IP (10.10.10.130 via DHCP) — the installer was just being cautious. I continued without network and the install completed fine.
-
-Key choices during install:
-- Full disk, LVM, no encryption
-- Username: `malakh`, Server name: `wazuh-server`
-- OpenSSH: installed
-- Ubuntu Pro: skipped
-
-After rebooting and logging in, I added a second Network Adapter set to NAT (VMnet8) to give the server temporary internet access for the Wazuh installation. I confirmed both interfaces were up:
+After the reboot I added a second adapter on NAT (VMnet8) to give the box temporary internet for the Wazuh install, and confirmed both interfaces were up before trusting either:
 
 - `ens33` — 10.10.10.130 (VMnet2, lab network)
 - `ens37` — 192.168.XX.XX (VMnet8, NAT/internet)
 
-I ran `ping -c 3 google.com` to confirm internet connectivity before proceeding.
+Then `ping -c 3 google.com` to verify the box could actually reach out.
 
-> **Note on `ping -c 3`:** The `-c 3` flag tells ping to stop after 3 packets instead of running indefinitely. Without it, you'd have to manually stop it with Ctrl+C. It's a habit worth building.
+> **Note on `ping -c 3`:** the `-c 3` caps it at three packets instead of pinging forever. Without it you're hitting Ctrl+C to stop a thing that should have stopped itself. Small habit, but it's the kind of small habit that compounds.
 
-#### Phase 2 — Install Wazuh
-
-I referenced the official Wazuh Quickstart guide at `https://documentation.wazuh.com/current/quickstart.html` for the install command. A rule I was actively working on building at the time: always get install commands from the official project documentation, not blog posts. Scripts often run as root, so source matters.
-
-The current install command (as of the time of this writeup) is:
+For the install command itself I went to the official Wazuh Quickstart (`https://documentation.wazuh.com/current/quickstart.html`) rather than a blog post — a rule I was actively trying to make automatic. These scripts run as root; *where the command comes from* matters as much as what it does. Same instinct as never acting on a source you haven't vetted.
 
 ```bash
 curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh
 sudo bash wazuh-install.sh -a
 ```
 
-Note: the URL path includes the specific version number (`4.14`). An earlier attempt with `4.x` returned an Access Denied error from the CDN — the generic path no longer works.
+One gotcha baked into that URL: the path pins the version (`4.14`). An earlier try with the generic `4.x` came back Access Denied from the CDN — the catch-all path no longer resolves.
 
-The installation took about 15 minutes and installed the Wazuh Manager, Indexer, and Dashboard on the same host. At the end it printed a summary with credentials:
-
-```
-User: admin
-Password: [generated password]
-```
-
-Those credentials were saved immediately. I also ran the following to retrieve them from the install files:
+About fifteen minutes later it had stood up the Manager, Indexer, and Dashboard on the one host, and printed the admin credentials. I saved those immediately, and also pulled them straight from the install files so I had a second copy:
 
 ```bash
 sudo tar -O -xvf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt
 ```
 
-There was one additional wrinkle: the generated password didn't work on first login attempt, possibly due to a copy/paste character encoding issue. I reset it using the Wazuh password tool:
+Then the part that ate real time: the generated password didn't work on first login. Best guess is a copy/paste encoding hiccup — the kind of silent character-mangling that makes you doubt your own typing. Rather than fight it, I reset it cleanly with the password tool:
 
 ```bash
 sudo /usr/share/wazuh-indexer/plugins/opensearch-security/tools/wazuh-passwords-tool.sh -u admin -p SOClab2026-Lab
 ```
 
-After that, logging in at `https://10.10.10.130` worked as expected.
+After that, `https://10.10.10.130` logged in without argument. Pulled the NAT adapter, snapshot **"Wazuh Installed - Clean."**
 
-I then removed the NAT adapter and took a snapshot: **"Wazuh Installed - Clean"**.
+### 5. The first endpoint, and the moment my own hands looked like an attacker
 
----
+This is the section where the lab stopped being plumbing and started being a SOC.
 
-### 5. Set Up Win11-Victim01
+**Standing up Win11.** Microsoft hands out 90-day evaluation copies of Windows 11 Enterprise, which is exactly what a fake corporate endpoint wants. Downloaded from `https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise`. There were two flavors — regular and LTSC — and I picked regular on purpose: LTSC is the stripped-down build for ATMs and medical gear, not the standard corporate desktop I was trying to imitate. VM: 6GB / 2 cores / 100GB / VMnet2.
 
-#### Phase 1 — Install Windows 11 Enterprise
+Two small first-contact snags. At the Boot Manager, "Boot normally" just looped back to the same screen — obvious in hindsight, since there was no OS installed yet; the right pick was **"EFI VMware Virtual SATA CDROM Drive"** to boot the ISO. And during setup, choosing "I don't have internet" was the move that let me skip the forced Microsoft account and make a local one instead. Privacy toggles all off (no telemetry from a lab), user `Victim01`, snapshot **"Win11 Fresh Install - Clean."**
 
-Microsoft provides free 90-day evaluation copies of Windows 11 Enterprise, which is exactly what a lab like this called for. Downloaded from:
+I installed VMware Tools next (**VM → Install VMware Tools**, then `setup.exe` off the virtual CD, Typical, reboot) — partly for performance, mostly because it enables the shared folders I'd need to move Sysmon onto an air-gapped VM later.
 
-`https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise`
+**The Wazuh agent.** Temporary NAT adapter on, both IPs confirmed (`10.10.10.131` on VMnet2, NAT on the other), then I opened the dashboard from inside the VM and walked **Deploy New Agent → Windows → MSI 32/64 bits**, server `10.10.10.130`, name `Win11-Victim01`. The dashboard generated a PowerShell one-liner; I ran it as Administrator, it pulled the MSI from Wazuh's servers and registered the agent on its own, and:
 
-Two options were available: regular and LTSC. LTSC (Long Term Servicing Channel) is a stripped-down version built for specialized environments like ATMs and medical equipment. The regular Windows 11 Enterprise was the right choice for simulating a standard corporate endpoint.
-
-VM settings: 6GB RAM, 1 socket / 2 cores, 100GB disk, VMnet2.
-
-One note on the boot process: when the Boot Manager appeared, selecting "Boot normally" looped back to the same screen since there was no OS installed yet. The right choice was **"EFI VMware Virtual SATA CDROM Drive"** to boot from the ISO.
-
-Setup choices worth noting:
-- When asked about network: chose "I don't have internet" — that was how to avoid being forced into a Microsoft account and create a local account instead
-- Privacy settings: turned everything off (no telemetry needed in a lab)
-- Username: `Victim01`
-
-Snapshot taken: **"Win11 Fresh Install - Clean"**
-
-#### Phase 2 — Install VMware Tools
-
-VMware Tools improves performance inside the VM and enables features like shared folders, which I needed for the Sysmon installation later.
-
-Going to **VM → Install VMware Tools** from the menu mounted the installer. I found the `setup.exe` on the virtual CD drive inside the VM and ran it with the **Typical** installation option. After the install and reboot, shared folder functionality was available.
-
-#### Phase 3 — Install Wazuh Agent
-
-I temporarily added a NAT adapter for internet access, confirmed the VM had both IPs (`10.10.10.131` on VMnet2, `192.168.XX.XX` on NAT), then navigated to the Wazuh dashboard from inside the VM at `https://10.10.10.130`.
-
-From the dashboard: **Deploy New Agent → Windows → MSI 32/64 bits**
-
-Filled in:
-- Server address: `10.10.10.130`
-- Agent name: `Win11-Victim01`
-
-The dashboard generated a PowerShell install command. I ran it in PowerShell as Administrator. The install pulled the MSI directly from Wazuh's servers and registered the agent with the SIEM automatically.
-
-Started the agent service:
 ```powershell
 NET START WazuhSvc
 ```
 
-Back in the dashboard, Win11-Victim01 showed up immediately as **Active**. Wazuh had already started doing Vulnerability Detection — 13 CVEs in Microsoft Edge and Microsoft Teams appeared within minutes of connection, several rated High severity. That was real threat intelligence with essentially zero configuration on my part.
+The agent showed **Active** in the dashboard immediately — and then did something that genuinely impressed me with zero input from me: it started reporting vulnerabilities. Within minutes, seven CVEs flagged against Microsoft Teams, several rated High. That's real threat intelligence the moment an endpoint checks in, no configuration on my part.
 
-Removed the NAT adapter. Snapshot: **"Wazuh Agent Installed - Clean"**
+![Wazuh Vulnerability Detection results for Win11-Victim01](screenshots/03_VulnDetection.jpg)
+*Wazuh's Vulnerability Detection view — seven CVEs surfaced on Win11-Victim01 against Microsoft Teams within minutes of the agent connecting, several rated High. The endpoint reports its own posture the instant it joins; the SIEM correlates it automatically.*
 
-#### Phase 4 — Install Sysmon
+Pulled the NAT adapter, snapshot **"Wazuh Agent Installed - Clean."**
 
-Sysmon (System Monitor) is a Windows system service that logs detailed process activity, network connections, file creation events, and more to the Windows Event Log. Without it, the visibility into what's actually happening on the endpoint is limited. With it, you get the kind of granular telemetry that makes SOC work actually meaningful.
+**Sysmon, and the false-positive flood.** Sysmon is the Windows service that logs the granular stuff — process creation, network connections, file writes — into the event log. Without it your endpoint visibility is shallow; with it you get the telemetry that makes detection actually possible. Here's the WHY before the how: the Wazuh agent ships standard Windows logs out of the box, but Sysmon writes to its *own* dedicated channel that nothing collects unless you tell it to.
 
-Since the NAT adapter had been removed, I couldn't download Sysmon directly to the VM. I downloaded two files to the host machine instead:
+Since the NAT adapter was gone, I couldn't download to the VM directly, so I pulled two files to the host instead:
 
-- **Sysmon** (from Microsoft Sysinternals): `https://download.sysinternals.com/files/Sysmon.zip`
-- **SwiftOnSecurity Sysmon config**: `https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml`
+- **Sysmon** (Sysinternals): `https://download.sysinternals.com/files/Sysmon.zip`
+- **SwiftOnSecurity config**: `https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml`
 
-The SwiftOnSecurity config is a well-maintained community configuration that covers the most important Windows events for SOC detection use. It was a reasonable starting point before I started tuning my own rules.
-
-I transferred both files to the VM using a VMware Shared Folder (configured under **VM → Settings → Options → Shared Folders**), then in PowerShell as Administrator:
+The SwiftOnSecurity config is the well-worn community baseline — a sane starting point that covers the events that matter, before I start writing my own rules. I moved both over a VMware Shared Folder (**VM → Settings → Options → Shared Folders**), then, in PowerShell as Administrator:
 
 ```powershell
 cd "\\vmware-host\Shared Folders\VMShare"
 .\Sysmon64.exe -accepteula -i sysmonconfig.xml
 ```
 
-Output confirmed:
-- Configuration validated ✅
-- Sysmon64 installed ✅
-- SysmonDrv installed ✅
-- Sysmon64 started ✅
-
-Next, I needed to tell the Wazuh agent to collect Sysmon logs and forward them to the SIEM. That required editing the agent configuration file:
+Output confirmed config validated, Sysmon64 installed, SysmonDrv installed, Sysmon64 started. But installing Sysmon only gets the data *into* the Windows event log — I still had to tell the Wazuh agent to read that channel and forward it:
 
 ```powershell
 notepad "C:\Program Files (x86)\ossec-agent\ossec.conf"
 ```
 
-I added the following block to the `<localfile>` section:
+added to the `<localfile>` section:
 
 ```xml
 <localfile>
@@ -258,14 +190,14 @@ I added the following block to the `<localfile>` section:
 </localfile>
 ```
 
-Then restarted the Wazuh agent:
+and restarted the agent so it would actually load the change (editing a config and reloading the service that reads it are two separate acts — a lesson that would cost me dearly in a later build):
 
 ```powershell
 NET STOP WazuhSvc
 NET START WazuhSvc
 ```
 
-In the Wazuh dashboard under **Threat Hunting**, filtering for `rule.groups: sysmon`, events started flowing immediately. All of them were from my own setup activity — but that was expected, and actually instructive:
+In the dashboard's **Threat Hunting** view, filtered to `rule.groups: sysmon`, events poured in instantly — and every single one was *me*:
 
 - *"Suspicious Windows cmd shell execution"*
 - *"Windows command prompt started by an abnormal process"*
@@ -273,21 +205,18 @@ In the Wazuh dashboard under **Threat Hunting**, filtering for `rule.groups: sys
 - *"PowerShell was used to delete files or directories"*
 - *"SecEdit.exe binary in a suspicious location launched by PowerShell"*
 
-These were all **false positives** — legitimate admin activity that looked suspicious to a SIEM. When I eventually ran real attacks from Kali, the same types of alerts would appear — but those would be **true positives**. Learning to tell the difference was one of the core skills I was actively working on.
+![Wazuh Threat Hunting events filtered to Sysmon](screenshots/02-ThreatHunting.jpg)
+*Threat Hunting filtered to `rule.groups: sysmon` — 32 hits, every one of them generated by my own setup work: cmd and PowerShell execution, SecEdit.exe launched from a suspicious location, file deletion. Textbook false positives, and the whole reason alert tuning exists.*
 
-Snapshot: **"Wazuh Agent + Sysmon Installed - Clean"**
+This was my first hands-on encounter with **false positives**, and it landed harder than reading about them ever did. My own legitimate admin activity was indistinguishable, to the SIEM, from an attack. When I eventually run real attacks from Kali, the *same* alerts will fire — except then they'll be true positives. The entire job sits in that gap: the data looks identical, and the analyst's work is deciding which is which.
 
----
+That is the most direct line from my old work to this one. Source evaluation is exactly this problem — a stream of plausible-looking signal, most of it benign, and the discipline to tell the rare real thing from the noise that resembles it. The tooling is new. The judgment is not. Snapshot **"Wazuh Agent + Sysmon Installed - Clean."**
 
-### 6. Set Up Ubuntu-Victim02
+### 6. The Linux endpoint — quick, this time
 
-The Ubuntu Server install process felt familiar at this point. New VM: 2GB RAM, 1 socket / 2 cores, 60GB disk, VMnet2. Pointed at the same Ubuntu Server ISO from earlier.
+By now the Ubuntu Server install felt routine, which is its own small reward. New VM at 2GB / 2 cores / 60GB / VMnet2, same ISO as before. It came up clean and grabbed `10.10.10.133` on VMnet2; OpenSSH in, Ubuntu Pro skipped, login prompt in short order.
 
-The install went cleanly — Ubuntu-Victim02 picked up `10.10.10.132` automatically on VMnet2. I installed OpenSSH, skipped Ubuntu Pro, and was at a working login prompt in a reasonable amount of time.
-
-**Wazuh Agent Installation:**
-
-Added a temporary NAT adapter, confirmed internet connectivity with `ping -c 3 google.com`, then installed the agent:
+The agent install is genuinely pleasant on Linux — one chained command, NAT adapter on, `ping -c 3 google.com` to confirm reachability first:
 
 ```bash
 wget https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.5-1_amd64.deb \
@@ -295,7 +224,7 @@ wget https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14
   dpkg -i ./wazuh-agent_4.14.5-1_amd64.deb
 ```
 
-Started and enabled the service:
+then bring it up and make it survive a reboot:
 
 ```bash
 sudo systemctl daemon-reload
@@ -304,64 +233,24 @@ sudo systemctl start wazuh-agent
 sudo systemctl status wazuh-agent
 ```
 
-Status: `active (running)`. Confirmed in the Wazuh dashboard — Ubuntu-Victim02 showed up as the second active agent.
+`active (running)`, and Ubuntu-Victim02 landed in the dashboard as the second live agent. NAT off, snapshot.
 
-Removed the NAT adapter. Snapshot: **"Wazuh Agent Installed - Clean"**
+### 7. The Domain Controller — the part I dreaded
 
----
+Here's the irony I flagged up top: this is the section I walked into nervous about, and it's the one that mostly cooperated. The friction it *did* throw was concentrated in two spots — a blank password, and DNS — and both were exactly the kind of foundational thing that's easy to overlook and impossible to skip.
 
-### 7. Set Up WinServer-DC01
+**Windows Server, the cautious choice.** Microsoft's 180-day Server evals come from `https://www.microsoft.com/en-us/evalcenter/evaluate-windows-server-2025`. I took **Server 2025 Standard**, not Datacenter — Datacenter is for big shops with unlimited-virtualization needs and is overkill for a lab. 4GB / 2 cores / 80GB / VMnet2, clean install, snapshot **"Fresh Install - Clean."**
 
-This was the step I had been both looking forward to and mildly dreading. Active Directory is a significant piece of infrastructure and I knew going in that there would be more moving parts than the previous VMs.
+The Wazuh agent went on the same way as Win11 — NAT, dashboard, deploy a new agent named `WinServer-DC01`, run the generated PowerShell, `NET START WazuhSvc`. That brought the fleet to three live agents, which felt like a milestone worth a screenshot.
 
-#### Phase 1 — Install Windows Server 2025
+![Three Wazuh agents active](screenshots/01_Agents_Working.jpg)
+*The Wazuh Agents view — all three endpoints (Win11-Victim01, Ubuntu-Victim02, WinServer-DC01) reporting `active` on agent v4.14.5. The full fleet, checked in and reporting to one SIEM.*
 
-Microsoft provides free 180-day evaluation copies of Windows Server from:
+NAT off, then Sysmon by the now-familiar path (shared folder, `Sysmon64.exe -accepteula -i sysmonconfig.xml`), snapshot **"Wazuh Agent + Sysmon Installed - Clean."**
 
-`https://www.microsoft.com/en-us/evalcenter/evaluate-windows-server-2025`
+**What AD DS actually is, before I touched it.** Right now WinServer-DC01 was a standalone box that knew about itself and nothing else. Installing the AD DS role turns it into a *directory service* — a central database of every object on the network (users, computers, groups, policies) — and promoting it to Domain Controller makes it the authority every other machine authenticates through. Understanding that *before* clicking through the wizard mattered: it's the difference between following steps and knowing what the steps are for. **Server Manager → Add Roles and Features → Role-based installation → Active Directory Domain Services → Add Features → Install**, "Restart automatically if required" checked.
 
-I chose **Windows Server 2025 Standard** (not Datacenter — that was for large enterprise environments with unlimited virtualization needs, overkill for a lab).
-
-VM settings: 4GB RAM, 1 socket / 2 cores, 80GB disk, VMnet2.
-
-The install was straightforward. Snapshot: **"Fresh Install - Clean"**
-
-#### Phase 2 — Install Wazuh Agent
-
-Same process as Win11-Victim01. Added a temporary NAT adapter, opened the Wazuh dashboard from a browser inside the VM, deployed a new agent configured for `WinServer-DC01`, ran the generated PowerShell command, and started the service with `NET START WazuhSvc`.
-
-All three agents confirmed active in the Wazuh dashboard.
-
-Removed the NAT adapter.
-
-#### Phase 3 — Install Sysmon
-
-Same process as Win11-Victim01, using the existing Shared Folder setup. Ran from PowerShell as Administrator:
-
-```powershell
-cd "\\vmware-host\Shared Folders\VMShare"
-.\Sysmon64.exe -accepteula -i sysmonconfig.xml
-```
-
-Snapshot: **"Wazuh Agent + Sysmon Installed - Clean"**
-
-#### Phase 4 — Install Active Directory Domain Services (AD DS)
-
-Before getting into the steps, it was worth taking a moment to understand what AD DS actually is and why it matters.
-
-At that point, WinServer-DC01 was just a standalone Windows machine — it only knew about itself and nothing else. Installing the AD DS role transforms it into a **directory service**: a central database that stores information about every object in the network (users, computers, groups, policies). Once promoted to a Domain Controller, every other machine that joins the domain authenticates through it. It becomes the central authority for the entire network.
-
-In Server Manager: **Add Roles and Features → Role-based installation → Active Directory Domain Services → Add Features → Install**.
-
-I checked "Restart automatically if required" and let it run.
-
-#### Phase 5 — Promote to Domain Controller
-
-After installation, a yellow flag appeared in Server Manager with a link to "Promote this server to a domain controller."
-
-I selected **"Add a new forest"** — this was the first DC, so I was creating an entirely new domain structure from scratch.
-
-A quick note on what a "forest" is, since it was new to me:
+**Promotion, and the blank-password block.** Afterward, the yellow flag in Server Manager offered "Promote this server to a domain controller." I chose **Add a new forest** — first DC, brand-new domain structure. A forest was new vocabulary to me, so, plainly:
 
 ```
 Forest
@@ -371,105 +260,83 @@ Forest
                     └── Users, Computers, Groups
 ```
 
-The **forest** is the outermost boundary — the entire AD environment lives inside it. For this lab, I created a single forest with a single domain: `soclab.local`. This is the most common setup in small-to-medium enterprises.
+The forest is the outermost boundary; the whole AD environment lives inside it. I built a single forest with a single domain, `soclab.local` — the common small-shop layout.
 
-One issue I ran into: the prerequisites check failed because the local Administrator account had a blank password. AD refused to create a new domain with an unsecured Administrator account. Fixed it in PowerShell:
+The prereq check then failed for a reason I respected: the local Administrator account had a blank password, and AD flatly refused to stand up a domain on an unsecured admin account. That's the OS enforcing a security floor I should have set myself, and it's a good reminder that "it let me proceed" is not the same as "it was safe." Fixed in PowerShell:
 
 ```powershell
 net user Administrator [strong-password]
 ```
 
-After rerunning the prerequisites check and hitting Install, the server promoted successfully and rebooted. Server Manager now showed **AD DS** and **DNS** as active roles.
+Re-ran the check, hit Install, and the server promoted and rebooted with **AD DS** and **DNS** now live as roles. Snapshot **"DC Promotion Complete - Clean."**
 
-Snapshot: **"DC Promotion Complete - Clean"**
-
-#### Phase 6 — Create Organizational Units and Test Users
-
-In Server Manager: **Tools → Active Directory Users and Computers**
-
-Right-clicked `soclab.local` and created four Organizational Units (OUs):
-
-- `Workstations`
-- `Servers`
-- `DomainUsers` (Note: "Users" was already taken by a default system container)
-- `Groups`
-
-Created two test users in the `DomainUsers` OU:
+**Structure and users.** In **Tools → Active Directory Users and Computers**, I right-clicked `soclab.local` and built four OUs: `Workstations`, `Servers`, `DomainUsers` (I wanted `Users`, but that name's already claimed by a default system container — a small naming collision worth knowing about), and `Groups`. Two test users went into `DomainUsers`:
 
 | Name | Username |
 |---|---|
 | John Smith | jsmith |
 | Jane Doe | jdoe |
 
-Both set with "Password never expires" and "User must not change password at next logon" unchecked — appropriate for a lab environment.
+Both with "Password never expires" set and "must change at next logon" unchecked — fine for a lab, the opposite of what you'd do in production. Then a `SOC-Lab-Users` security group in `Groups`, with jsmith and jdoe added as members.
 
-Created a security group `SOC-Lab-Users` in the `Groups` OU, then added jsmith and jdoe as members.
+![Active Directory Users and Computers showing the soclab.local structure](screenshots/04-ActiveDirectory.jpg)
+*Active Directory Users and Computers on WinServer-DC01 — the `soclab.local` tree with the custom OUs (Workstations, Servers, Groups, DomainUsers) alongside the default containers, and the two test users, John Smith and Jane Doe, sitting in DomainUsers.*
 
-Snapshot: **"AD Structure Complete - Users and OUs Created"**
+Snapshot **"AD Structure Complete - Users and OUs Created."**
 
-#### Phase 7 — Join Win11-Victim01 to the Domain
-
-Before joining, I needed to point Win11-Victim01's DNS at the Domain Controller. Machines find the domain through DNS, so this step was critical.
-
-In PowerShell on Win11-Victim01:
+**Joining Win11 — DNS first.** A machine finds its domain through DNS, so before anything else I pointed Win11-Victim01's resolver at the DC. This is Net+ knowledge I had cold on paper and was now wiring up for real:
 
 ```powershell
 netsh interface ip set dns "Ethernet0" static 10.10.10.134
 nslookup soclab.local
 ```
 
-The nslookup resolved to the correct address. Then:
+`nslookup` resolved correctly, which was the green light, then:
 
 ```powershell
 Add-Computer -DomainName soclab.local -Credential SOCLAB\Administrator -Restart
 ```
 
-After the reboot, I confirmed the domain join:
+and after the reboot I *verified* rather than assumed:
 
 ```powershell
 systeminfo | findstr /B /C:"Domain"
 ```
 
-Output: `Domain: soclab.local`
+`Domain: soclab.local`. Agents still active, snapshot **"Joined soclab.local Domain - Clean."**
 
-All Wazuh agents confirmed still active. Snapshot: **"Joined soclab.local Domain - Clean"**
-
-#### Phase 8 — Join Ubuntu-Victim02 to the Domain
-
-Joining a Linux machine to a Windows AD domain requires some extra packages not installed by default. This was one of the more interesting steps in the whole build because it's something I didn't fully appreciate was possible before starting.
-
-Added a temporary NAT adapter for internet access, then installed the required packages:
+**Joining Ubuntu — the beat that taught me the most.** I didn't fully appreciate, before this, that a Linux box could join a Windows domain at all. It can, but not out of the box — it needs a package stack first. NAT on, then:
 
 ```bash
 sudo apt update && sudo apt install -y realmd sssd sssd-tools adcli packagekit samba-common-bin oddjob oddjob-mkhomedir
 ```
 
-What each package does:
+What the load-bearing pieces do:
 - **realmd** — discovers and joins AD domains
 - **sssd** — handles AD authentication on Linux
-- **adcli** — AD command line interface
-- **samba-common-bin** — Samba utilities for Windows/Linux interoperability
+- **adcli** — the AD command-line interface
+- **samba-common-bin** — Samba utilities for Windows/Linux interop
 
-Then I tried discovering the domain:
+Then I tried to discover the domain and hit the wall that made this section memorable:
 
 ```bash
 sudo realm discover soclab.local
 ```
 
-Got "No such realm found." The issue was DNS — Ubuntu-Victim02 wasn't pointed at the Domain Controller for DNS resolution. Fixed it:
+**"No such realm found."** And here's where the verify-the-foundation habit paid off instead of sending me down a rabbit hole: the symptom screamed "domain problem," but the actual fault was one layer down. Ubuntu's resolver still wasn't pointed at the DC, so the discovery had no way to *find* anything to discover. Same lesson the Win11 join had just taught, in a different accent — in a mixed-OS environment, DNS is the floor everything else stands on. Fixed it:
 
 ```bash
 sudo nano /etc/resolv.conf
-# Changed nameserver to 10.10.10.134
+# nameserver -> 10.10.10.134
 ```
 
-Ran `sudo realm discover soclab.local` again and it returned the full domain information. Then joined:
+`sudo realm discover soclab.local` now returned the full domain, and the join went clean:
 
 ```bash
 sudo realm join -U Administrator soclab.local
 ```
 
-Confirmed with `realm list`:
+`realm list` confirmed it:
 
 ```
 soclab.local
@@ -479,9 +346,7 @@ soclab.local
   login-policy: allow-realm-logins
 ```
 
-Both Win11-Victim01 and Ubuntu-Victim02 appeared in the `Computers` container in Active Directory Users and Computers on WinServer-DC01.
-
-Removed the NAT adapter. Snapshot: **"Joined soclab.local Domain - Clean"**
+Both endpoints showed up in the `Computers` container on the DC. NAT off, snapshot **"Joined soclab.local Domain - Clean."**
 
 ---
 
@@ -492,28 +357,24 @@ Removed the NAT adapter. Snapshot: **"Joined soclab.local Domain - Clean"**
 | Kali-AttackBox | 10.10.10.128 | Attacker | No | No | No |
 | Wazuh-Server | 10.10.10.130 | SIEM / XDR | No | No | No |
 | Win11-Victim01 | 10.10.10.131 | Windows Endpoint | Yes (soclab.local) | Yes | Yes |
-| Ubuntu-Victim02 | 10.10.10.132 | Linux Endpoint | Yes (soclab.local) | Yes | No |
+| Ubuntu-Victim02 | 10.10.10.133 | Linux Endpoint | Yes (soclab.local) | Yes | No |
 | WinServer-DC01 | 10.10.10.134 | Domain Controller | Yes (soclab.local) | Yes | Yes |
+
+The laptop-glaring-at-the-desktop is gone. In its place: five machines on an isolated segment, three of them reporting endpoint and Sysmon telemetry to a SIEM, two of them joined to a domain run by a controller I promoted by hand — the environment a SOC analyst actually works inside, instead of two computers staring each other down.
 
 ---
 
-## Key Findings
+## Key Lessons (the transferable kind)
 
-### Finding 1 — Wazuh Begins Detecting Vulnerabilities Immediately
+These are the ones I'll carry forward, because each cost me something to learn.
 
-Within minutes of the Wazuh agent connecting on Win11-Victim01, the dashboard surfaced 13 CVEs — several rated High severity — in Microsoft Edge and Microsoft Teams. No manual configuration required. This was a useful early demonstration of what agent-based SIEM coverage looks like in practice: the endpoint starts reporting its posture immediately, and the SIEM starts correlating against known vulnerability data automatically.
-
-### Finding 2 — Sysmon Flags All Admin Activity as Suspicious
-
-After installing Sysmon and configuring the Wazuh agent to collect its logs, the Threat Hunting view immediately populated with events — all generated by my own setup work. Commands run in PowerShell as Administrator, file operations, process chains from the Wazuh agent installer — all flagged. This was my first hands-on experience with **false positives**: legitimate admin activity that looks suspicious to a SIEM. Learning to identify and tune these out is one of the foundational skills in SOC work, and seeing it happen on my own lab gave me a concrete frame of reference for why alert tuning matters.
-
-### Finding 3 — Linux Can Join a Windows AD Domain, But DNS Must Come First
-
-Joining Ubuntu-Victim02 to `soclab.local` required the `realmd` and `sssd` package stack, which is not installed by default. More importantly, the domain join failed until I manually pointed Ubuntu's DNS resolver at the Domain Controller. The `realm discover` command returned "No such realm found" until DNS was corrected — at which point the entire process worked cleanly. The lesson: in a mixed-OS environment, DNS is the foundation everything else depends on.
-
-### Finding 4 — VMware Custom Networks Require a Non-Obvious Setting to Appear in VM Dropdowns
-
-Custom VMnets created in the Virtual Network Editor don't automatically appear in the VM Network Adapter dropdown. The fix was checking **"Connect a host virtual adapter to this network"** for each custom VMnet. Without this, the networks exist on paper but the VMs can't select them. This wasn't documented anywhere obvious — it required troubleshooting to discover.
+1. **The boring infrastructure is the hard part.** I braced for Active Directory and got ambushed by a download portal and an unchecked box. The marquee security tools mostly behave; the plumbing, permissions, and DNS around them are where the time goes — which, conveniently, is also where things break at 2am in a real SOC.
+2. **Custom VMnets are invisible until you connect a host adapter.** Networks created in the Virtual Network Editor don't appear in the VM dropdown until "Connect a host virtual adapter to this network" is checked. Documented nowhere obvious; found by troubleshooting.
+3. **Wazuh starts earning its keep the instant an agent connects.** Seven CVEs against Microsoft Teams surfaced on Win11 within minutes, several High, zero configuration. Agent-based coverage means an endpoint reports its own posture the moment it checks in.
+4. **Your own hands look exactly like an attacker's.** Every Sysmon alert in the first pass was my legitimate setup activity. False positives aren't an edge case — they're the default, and telling them from true positives is the actual job, not a footnote to it.
+5. **In a mixed-OS environment, DNS is the foundation.** The Linux domain join failed with "No such realm found" until I pointed the resolver at the DC. The symptom looked like a domain problem; the fault was one layer below it. Check the floor before you blame the walls.
+6. **Source matters for install commands.** Get them from official project documentation, not blog posts. These scripts run as root — *where the command came from* is part of its trustworthiness. Same instinct as vetting a source before acting on it.
+7. **"It let me proceed" is not "it was safe."** AD refused to promote on a blank Administrator password — the OS enforcing a floor I should have set myself. Worth internalizing as a habit rather than waiting to be told.
 
 ---
 
@@ -544,37 +405,35 @@ Custom VMnets created in the Virtual Network Editor don't automatically appear i
 
 ## SOC Relevance
 
-This lab mirrors the kind of environment a Tier 1 or Tier 2 SOC analyst operates in at an MSSP or enterprise security team. The core infrastructure — a SIEM receiving telemetry from instrumented endpoints across a domain — is the foundation of almost every SOC engagement.
+This is the environment a Tier 1 or Tier 2 analyst lives in at an MSSP or an enterprise security team: a SIEM taking telemetry from instrumented endpoints across a domain. That core shape is the foundation under almost every SOC engagement.
 
-The hands-on experience of configuring log collection, watching alerts fire in real time, and distinguishing legitimate admin activity from genuinely suspicious behavior is directly relevant to day-one SOC analyst work. Understanding how the data gets from the endpoint to the SIEM, and why certain events trigger alerts while others don't, is the kind of knowledge that makes alert triage faster and more accurate.
+And the hands-on parts are the parts that transfer most directly — configuring log collection, watching alerts fire in real time, and separating routine admin noise from something that actually warrants a second look. When I sat in front of a Threat Hunting view full of my own activity dressed up as suspicious behavior, I was doing a small version of exactly what day-one SOC work is. Knowing how the data gets from endpoint to SIEM, and why some events trip alerts while others don't, is what makes triage faster and less guessy. I built every hop, so I know where each one runs.
 
 ---
 
 ## HUMINT to SOC Translation
 
-My background in HUMINT involves building operational frameworks from scratch, making decisions under uncertainty, and working through problems methodically when the documentation doesn't give you a clear path forward. That mindset showed up repeatedly throughout this build — from troubleshooting the VMnet dropdown issue, to tracking down the correct Wazuh package URL, to figuring out why Ubuntu couldn't discover the domain.
+Two decades of source work left me with a few instincts that turned out to be the most useful tools in this build, and none of them are technical.
 
-More specifically, the HUMINT skills of source verification and adversarial thinking translate directly. Always getting install commands from official documentation rather than random blog posts is the same instinct as verifying a source before acting on intelligence. And building detection logic requires thinking like an adversary — which is something HUMINT practitioners do by default.
+The first is verifying the foundation before trusting anything built on it. It showed up when I refused to accept the stale "30-day" download page over what I knew to be true, when I pulled the Wazuh command from official docs instead of a blog, and most clearly when "No such realm found" turned out to be a DNS problem one layer beneath the symptom. The discipline is the same as vetting a source before you act on what it tells you — the cost of skipping it is being confidently wrong.
+
+The second is the signal-versus-noise problem, which *is* the false-positive lesson. A SIEM hands you a stream of plausible-looking activity, the overwhelming majority of it benign, and asks you to find the rare real thing inside it. That's source evaluation with different nouns. The careful read isn't in any single alert; it's in knowing what normal looks like well enough to feel the thing that isn't.
+
+And the third is just working a problem methodically when the documentation runs out — the VMnet dropdown, the password that wouldn't take, the resolver pointed at nothing. The tooling here is new to my hands. The way of thinking is not, and it's the part that doesn't print on a certificate.
 
 ---
 
-## Plans for Phase 2
+## What's Next
 
-My prior dual-machine home SOC lab covered foundational ground:
+My earlier dual-machine lab covered the foundational ground — basic recon detection, failed-login investigation, suspicious-PowerShell hunting with Sysmon, phishing triage, and one end-to-end recon-to-detection run. With five VMs and a real Active Directory domain now standing, the next phase goes after the attacks that domain makes possible:
 
-- **Project 1:** Detecting Network Reconnaissance Activity
-- **Project 2:** Investigating Repeated Failed Login Attempts
-- **Project 3:** Investigating Suspicious PowerShell Activity with Sysmon
-- **Project 4:** SOC-Style Phishing Email Triage Report
-- **Project 5:** End-to-End SOC Investigation: Reconnaissance to Detection
+- **Project 1:** Credential attack against Active Directory — password spray (MITRE T1110.003)
+- **Project 2:** Kerberoasting — Event ID 4769 detection (MITRE T1558.003)
+- **Project 3:** Lateral movement detection
+- **Project 4:** Custom detection rule writing
+- **Project 5:** Full purple-team exercise — end-to-end attack chain with a complete incident report
 
-With the 5x VM lab and Active Directory now in place, Phase 2 is planned to go significantly deeper:
-
-- **Project 1:** Credential Attack Against Active Directory (password spray, MITRE T1110.003)
-- **Project 2:** Kerberoasting (Event ID 4769 detection, MITRE T1558.003)
-- **Project 3:** Lateral Movement Detection
-- **Project 4:** Custom Detection Rule Writing
-- **Project 5:** Full Purple Team Exercise — end-to-end attack chain with incident report
+That's where this stops being an environment I stood up and becomes one I can defend, attack by attack, detection by detection.
 
 ---
 
