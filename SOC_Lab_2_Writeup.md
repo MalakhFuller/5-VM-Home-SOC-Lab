@@ -1,4 +1,4 @@
-# SOC Lab 2: 5x VMs | Wazuh SIEM | AD Domain Controller | 2 Victims | 1 AttackBox
+# SOC Lab 2: 5x VMs | Wazuh SIEM | AD DC | 2 Victims | 1 AttackBox
 
 **Completed:** 2026-06-01
 **Author:** Malakh Fuller
