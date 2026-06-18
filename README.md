@@ -1,6 +1,8 @@
 # SOC Lab 2: 5x VMs | Wazuh SIEM | AD DC | 2 Victims | 1 AttackBox
 
-This repository documents the build-out and exercises of a multi-VM SOC lab environment designed to simulate real enterprise security operations, built as a hands-on learning environment to develop SOC analyst and detection engineering skills. The lab features a Wazuh SIEM/XDR manager receiving telemetry from Windows and Linux endpoints instrumented with Sysmon, with a dedicated Kali Linux attack box for adversary simulation mapped to MITRE ATT&CK techniques. Each project builds on the last, progressively covering detection engineering, log analysis, threat hunting, and incident response workflows.
+This is where I'm learning to defend a network by first building one worth attacking.
+
+It's a five-VM SOC lab, fully isolated: a Wazuh SIEM/XDR taking telemetry from Windows and Linux endpoints wired with Sysmon, an Active Directory domain to give the attacks something real to move through, and a Kali box to do the attacking — mapped to MITRE ATT&CK as I go. The work runs in order, each project building on the last, from "stand up the environment" toward "catch a full attack chain inside it." The writeups are the honest version: where I took a wrong turn or assumed something that wasn't true, it's left in, because that's the part that actually taught me something.
 
 ---
 
@@ -11,10 +13,10 @@ This repository documents the build-out and exercises of a multi-VM SOC lab envi
 | Wazuh-Server | SIEM / XDR | Ubuntu Server 26.04 | 10.10.10.130 |
 | Kali-AttackBox | Attack Simulation | Kali Linux 2026.1 | 10.10.10.128 |
 | Win11-Victim01 | Windows Endpoint | Windows 11 Enterprise (Eval) | 10.10.10.131 |
-| Ubuntu-Victim02 | Linux Endpoint | Ubuntu Server 26.04 | 10.10.10.132 |
+| Ubuntu-Victim02 | Linux Endpoint | Ubuntu Server 26.04 | 10.10.10.133 |
 | WinServer-DC01 | Active Directory DC | Windows Server 2025 (Eval) | 10.10.10.134 |
 
-All VMs operate on an isolated internal network (VMnet2, 10.10.10.0/24) with no direct access to the host machine or real home network.
+Everything lives on an isolated internal segment (VMnet2, 10.10.10.0/24) with no path to the host or my real home network. Internet is the exception, not the default — NAT gets toggled on only for the install steps that need it, then pulled back off.
 
 ---
 
@@ -22,7 +24,7 @@ All VMs operate on an isolated internal network (VMnet2, 10.10.10.0/24) with no 
 
 ### Project 1 — Full 5-VM SOC Lab Build | Wazuh SIEM | Active Directory | Sysmon
 
-Complete build-out of a 5-VM isolated SOC lab from scratch, including hypervisor configuration, network segmentation, SIEM deployment, endpoint instrumentation, Active Directory setup, and domain joining of both Windows and Linux endpoints.
+Building the whole environment from nothing: hypervisor and network segmentation, the Wazuh SIEM, endpoint instrumentation with Sysmon, a from-scratch Active Directory domain, and joining both a Windows and a Linux endpoint to it. The short version of what it taught me — the security tooling was rarely the hard part; the plumbing, permissions, and DNS around it were, which is exactly the stuff that breaks at 2am in a real SOC.
 
 **Skills demonstrated:**
 - Multi-VM hypervisor configuration (VMware Workstation Pro)
@@ -39,40 +41,24 @@ Complete build-out of a 5-VM isolated SOC lab from scratch, including hypervisor
 
 ---
 
-## Phase 2: Attack Simulation and Detection (Planned)
+## Phase 2: Attack Simulation and Detection — *paused on purpose*
+
+Phase 2 is the offensive half: run real attacks against the domain and catch them in the SIEM. It's deliberately on hold, and the reason is a resequencing call I'd make again. Before I start hunting attacks, I'm widening the lens — standing up a second SIEM (Splunk) alongside Wazuh and a passive Suricata sensor on the wire, so I'm watching from both the endpoint *and* the network at once instead of trusting a single vantage point. Detecting an attack you can't see isn't detection, and I'd rather build the better instrument first than run the exercises half-blind. Everything below is queued behind that work.
 
 ### Project 2 — Credential Attack Against Active Directory
-Simulating a password spray attack against domain accounts using Kali, with detection via Wazuh (Event ID 4625, 4771) and MITRE ATT&CK mapping (T1110.003).
-
-**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
-
----
+Password spray against domain accounts from Kali, detected in Wazuh via Event IDs 4625 / 4771. MITRE ATT&CK: T1110.003.
 
 ### Project 3 — Kerberoasting
-Requesting service tickets for domain accounts from Kali and detecting the attack signature in Wazuh via Event ID 4769. MITRE ATT&CK mapping: T1558.003.
-
-**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
-
----
+Requesting service tickets for domain accounts and catching the signature in Wazuh via Event ID 4769. MITRE ATT&CK: T1558.003.
 
 ### Project 4 — Lateral Movement Detection
 Using compromised credentials to move between endpoints, with Sysmon and Wazuh tracing the full process chain and kill path.
 
-**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
-
----
-
 ### Project 5 — Custom Detection Rule Writing
-Identifying a gap in Wazuh's default detection coverage and writing a custom rule to close it — the core skill of detection engineering.
-
-**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
-
----
+Finding a gap in Wazuh's default coverage and writing a rule to close it — the core skill of detection engineering, and the one I'm building toward.
 
 ### Project 6 — Full Purple Team Exercise
-End-to-end attack chain from initial reconnaissance through domain compromise, fully documented as a SOC incident report.
-
-**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
+The capstone: an end-to-end attack chain from recon through domain compromise, written up as a complete SOC incident report.
 
 ---
 
