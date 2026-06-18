@@ -244,6 +244,7 @@ Here's the irony I flagged up top: this is the section I walked into nervous abo
 The Wazuh agent went on the same way as Win11 — NAT, dashboard, deploy a new agent named `WinServer-DC01`, run the generated PowerShell, `NET START WazuhSvc`. That brought the fleet to three live agents, which felt like a milestone worth a screenshot.
 
 ![Three Wazuh agents active](screenshots/01_Agents_Working.jpg)
+
 *The Wazuh Agents view — all three endpoints (Win11-Victim01, Ubuntu-Victim02, WinServer-DC01) reporting `active` on agent v4.14.5. The full fleet, checked in and reporting to one SIEM.*
 
 NAT off, then Sysmon by the now-familiar path (shared folder, `Sysmon64.exe -accepteula -i sysmonconfig.xml`), snapshot **"Wazuh Agent + Sysmon Installed - Clean."**
