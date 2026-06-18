@@ -44,35 +44,35 @@ Complete build-out of a 5-VM isolated SOC lab from scratch, including hypervisor
 ### Project 2 — Credential Attack Against Active Directory
 Simulating a password spray attack against domain accounts using Kali, with detection via Wazuh (Event ID 4625, 4771) and MITRE ATT&CK mapping (T1110.003).
 
-**Status:** Planned
+**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
 
 ---
 
 ### Project 3 — Kerberoasting
 Requesting service tickets for domain accounts from Kali and detecting the attack signature in Wazuh via Event ID 4769. MITRE ATT&CK mapping: T1558.003.
 
-**Status:** Planned
+**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
 
 ---
 
 ### Project 4 — Lateral Movement Detection
 Using compromised credentials to move between endpoints, with Sysmon and Wazuh tracing the full process chain and kill path.
 
-**Status:** Planned
+**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
 
 ---
 
 ### Project 5 — Custom Detection Rule Writing
 Identifying a gap in Wazuh's default detection coverage and writing a custom rule to close it — the core skill of detection engineering.
 
-**Status:** Planned
+**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
 
 ---
 
 ### Project 6 — Full Purple Team Exercise
 End-to-end attack chain from initial reconnaissance through domain compromise, fully documented as a SOC incident report.
 
-**Status:** Planned
+**Status:** Planned, but delayed while I wire a dual SIEM with Suricata running passive for better detection and analysis capabilities.
 
 ---
 
