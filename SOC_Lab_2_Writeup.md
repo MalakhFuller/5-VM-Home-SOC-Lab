@@ -419,7 +419,7 @@ And the hands-on parts are the parts that transfer most directly — configuring
 
 ## Competitive Intelligence to SOC Translation
 
-For twenty years before this I worked in competitive intelligence — an analyst's desk, not a field. I directed researchers who got people on the phone talking, then did the harder part: reviewing what came back, pushing on anything that didn't add up, and confirming a claim a second and third way before I'd build it into a picture executives would act on. None of that is technical. The instincts under it turned out to be the most useful tools in this build.
+For twenty years before this I worked in competitive intelligence as an analyst and client-facing consultant. The internal job was directing researchers who got people on the phone talking, then did the harder part: reviewing what came back, pushing on anything that didn't add up, and confirming a claim a second and third way before I'd build it into a picture executives would act on. None of that is technical. The instincts under it turned out to be the most useful tools in this build.
 
 The first is verifying the foundation before trusting anything built on it. It showed up when I refused to accept the stale "30-day" download page over what I knew to be true, when I pulled the Wazuh command from official docs instead of a blog, and most clearly when "No such realm found" turned out to be a DNS problem one layer beneath the symptom. The discipline is the same as corroborating a claim before you act on it — the cost of skipping it is being confidently wrong.
 
