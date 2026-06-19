@@ -393,6 +393,12 @@ These are the ones I'll carry forward, because each cost me something to learn.
 
 ---
 
+## Key Competencies Demonstrated
+
+*(Functional skills list retained — see above.)*
+
+---
+
 ## Employer-Relevant Skills
 
 **Tools:** Wazuh, Sysmon, VMware Workstation Pro, PowerShell, Linux CLI (Ubuntu), Active Directory Users and Computers, Windows Server Manager
@@ -411,11 +417,11 @@ And the hands-on parts are the parts that transfer most directly — configuring
 
 ---
 
-## HUMINT to SOC Translation
+## Competitive Intelligence to SOC Translation
 
-Two decades of source work left me with a few instincts that turned out to be the most useful tools in this build, and none of them are technical.
+For twenty years before this I worked in competitive intelligence — an analyst's desk, not a field. I directed researchers who got people on the phone talking, then did the harder part: reviewing what came back, pushing on anything that didn't add up, and confirming a claim a second and third way before I'd build it into a picture executives would act on. None of that is technical. The instincts under it turned out to be the most useful tools in this build.
 
-The first is verifying the foundation before trusting anything built on it. It showed up when I refused to accept the stale "30-day" download page over what I knew to be true, when I pulled the Wazuh command from official docs instead of a blog, and most clearly when "No such realm found" turned out to be a DNS problem one layer beneath the symptom. The discipline is the same as vetting a source before you act on what it tells you — the cost of skipping it is being confidently wrong.
+The first is verifying the foundation before trusting anything built on it. It showed up when I refused to accept the stale "30-day" download page over what I knew to be true, when I pulled the Wazuh command from official docs instead of a blog, and most clearly when "No such realm found" turned out to be a DNS problem one layer beneath the symptom. The discipline is the same as corroborating a claim before you act on it — the cost of skipping it is being confidently wrong.
 
 The second is the signal-versus-noise problem, which *is* the false-positive lesson. A SIEM hands you a stream of plausible-looking activity, the overwhelming majority of it benign, and asks you to find the rare real thing inside it. That's source evaluation with different nouns. The careful read isn't in any single alert; it's in knowing what normal looks like well enough to feel the thing that isn't.
 
