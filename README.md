@@ -64,7 +64,9 @@ Finding a gap in Wazuh (and now also Splunk)'s default coverage and writing a ru
 ### Project 6 — Full Purple Team Exercise
 The capstone: an end-to-end attack chain from recon through domain compromise, written up as a complete SOC incident report.
 
-These efforts unpaused on the 7-VM dual SIEM can be viewed [here.](https://github.com/MalakhFuller/7-VM-Home-SOC-Lab)
+---
+
+These efforts unpaused on the now setup 7-VM dual SIEM can be viewed [here.](https://github.com/MalakhFuller/7-VM-Home-SOC-Lab)
 
 ---
 
