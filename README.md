@@ -72,4 +72,6 @@ These efforts unpaused on the now setup 7-VM dual SIEM can be viewed [here.](htt
 
 ## Author
 
-[Malakh Fuller](https://www.linkedin.com/in/malakhfuller/)
+**Malakh Fuller** — [LinkedIn](https://www.linkedin.com/in/malakhfuller/) · [GitHub](https://github.com/MalakhFuller)
+
+*CompTIA A+ · Network+ · Security+ · CySA+ (in progress) · transitioning into SOC analysis and detection engineering after twenty years in human-intelligence-driven competitive intelligence research.*
